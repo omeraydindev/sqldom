@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>node-sql-parser</title>
+    <meta charset="utf-8"/>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #sql-form {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #sql-input {
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 10px;
+            font-size: 16px;
+            outline: none;
+            margin-top: 10px;
+        }
+
+        .flashing {
+            animation: flashing .5s infinite;
+            border: red 1px solid !important;
+        }
+
+        @keyframes flashing {
+            0% {
+                background-color: #fff;
+            }
+            50% {
+                background-color: #fdd46f;
+            }
+            100% {
+                background-color: #fff;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <form id="sql-form" autocomplete="off">
+        <label for="sql-input">Query DOM elements using SQL</label>
+        <input type="text" id="sql-input" style="width: 500px; height: 150px;"
+               value="select * from dom where type='text' or id='sql-form' ">
+    </form>
+</div>
+<script src="https://unpkg.com/node-sql-parser/umd/mysql.umd.js"></script>
+<script>
+    const getSqlParser = () => {
+        return window.sqlParser ||= new NodeSQLParser.Parser();
+    }
+
+    const sqlInput = document.getElementById('sql-input');
+    const sqlForm = document.getElementById('sql-form');
+
+    sqlForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const sql = sqlInput.value;
+        const {ast} = getSqlParser().parse(sql);
+
+        if (Array.isArray(ast)) {
+            ast.forEach(evalSql);
+        } else {
+            evalSql(ast);
+        }
+    });
+
+    function evalSql(ast) {
+        const {from: fromTables, where} = ast;
+
+        const selector = fromTables.some(from => /dom/i.test(from.table)) ? '*'
+            : fromTables.map(from => from.table).join(',');
+
+        const elements =
+            [...document.querySelectorAll(selector)]
+                .filter(element => where ? evalWhere(element, where) : true);
+
+        console.log(elements);
+        elements.forEach(element => element.classList.add('flashing'));
+        setTimeout(() => elements.forEach(element => element.classList.remove('flashing')), 1500);
+    }
+
+    function evalWhere(element, where) {
+        const {left, right, operator, expr} = where;
+
+        function evalOperand(operand) {
+            const refTypes = ['column_ref'];
+            const valueTypes = ['single_quote_string', 'string', 'number', 'bool', 'null'];
+
+            if (refTypes.includes(operand.type)) {
+                return element.getAttribute(operand.column);
+            } else if (valueTypes.includes(operand.type)) {
+                return operand.value;
+            } else if (operand.type === 'function') {
+                return evalFunction(operand);
+            }
+
+            throw new Error('Invalid operand: ' + JSON.stringify(operand));
+        }
+
+        function evalFunction(operand) {
+            const args = operand.args.value;
+
+            if (operand.name === 'length') {
+                return evalOperand(args[0])?.toString().length ?? 0;
+            }
+
+            throw new Error('Invalid function: ' + JSON.stringify(operand));
+        }
+
+        if (operator === 'NOT') {
+            return !evalWhere(element, expr);
+        } else if (operator === 'OR') {
+            return evalWhere(element, left) || evalWhere(element, right);
+        } else if (operator === 'AND') {
+            return evalWhere(element, left) && evalWhere(element, right);
+        } else if (operator === '=') {
+            return evalOperand(left) === evalOperand(right);
+        } else if (operator === '!=' || operator === '<>') {
+            return evalOperand(left) !== evalOperand(right);
+        } else if (operator === 'IS') {
+            return evalOperand(left) === evalOperand(right);
+        } else if (operator === 'IS NOT') {
+            return evalOperand(left) !== evalOperand(right);
+        } else if (operator === '<') {
+            return evalOperand(left) < evalOperand(right);
+        } else if (operator === '<=') {
+            return evalOperand(left) <= evalOperand(right);
+        } else if (operator === '>') {
+            return evalOperand(left) > evalOperand(right);
+        } else if (operator === '>=') {
+            return evalOperand(left) >= evalOperand(right);
+        } else if (operator === 'LIKE') {
+            const lhs = evalOperand(left);
+            const rhs = evalOperand(right);
+            const likeToRegex = (like) =>
+                new RegExp('^' + like.replace(/%/g, '.*').replace(/_/g, '.') + '$');
+
+            return likeToRegex(rhs).test(lhs);
+        } else if (operator === 'RLIKE') {
+            const lhs = evalOperand(left);
+            const rhs = evalOperand(right);
+
+            return new RegExp(rhs).test(lhs);
+        } else if (operator === 'IN' || operator === 'NOT IN') {
+            if (left.type === 'expr_list') {
+                throw new Error('Left hand side cannot be a list in an IN condition');
+            }
+            if (right.type !== 'expr_list') {
+                throw new Error('Right hand side has to be a list in an IN condition');
+            }
+
+            const result = right.value.map(evalOperand).includes(evalOperand(left));
+            return operator.startsWith('NOT') ? !result : result;
+        } else if (operator === 'BETWEEN' || operator === 'NOT BETWEEN') {
+            if (left.type === 'expr_list') {
+                throw new Error('Left hand side cannot be a list in a BETWEEN condition');
+            }
+            if (right.type !== 'expr_list') {
+                throw new Error('Right hand side has to be a list in a BETWEEN condition');
+            }
+
+            const lhs = evalOperand(left);
+            const rhs = right.value.map(evalOperand);
+            const result = lhs >= rhs[0] && lhs <= rhs[1];
+            return operator.startsWith('NOT') ? !result : result;
+        } else if (operator === undefined) {
+            // select * from dom where 1
+            return !!evalOperand(where);
+        }
+
+        throw new Error('Invalid operator: ' + operator);
+    }
+</script>
+</body>
+</html>
+
