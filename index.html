@@ -22,6 +22,8 @@
             display: flex;
             justify-content: center;
             align-items: center;
+            flex-direction: column;
+            gap: 20px;
         }
 
         #sql-form {
@@ -68,14 +70,15 @@
 <script src="https://unpkg.com/node-sql-parser/umd/mysql.umd.js"></script>
 <script src="sqldom.js"></script>
 <script>
-    const sqlInput = document.getElementById('sql-input');
-    const sqlForm = document.getElementById('sql-form');
+    const container = document.querySelector('.container');
+    const sqlInput = document.querySelector('#sql-input');
+    const sqlForm = document.querySelector('#sql-form');
 
     sqlForm.addEventListener('submit', (e) => {
         e.preventDefault();
         const sql = sqlInput.value;
 
-        const results = execSql(sql);
+        const results = execSql(sql, {insertTo: container});
         (Array.isArray(results) ? results : [results])
             .forEach(result => result.elements.forEach(highlightElement));
 

@@ -1,4 +1,4 @@
-function execSql(sql) {
+function execSql(sql, options) {
     const sqlParser = new NodeSQLParser.Parser();
     const {ast} = sqlParser.parse(sql);
 
@@ -8,21 +8,59 @@ function execSql(sql) {
 
     function evalAst(ast) {
         const {type, where, set} = ast;
-        const selector = buildCssSelector(ast);
 
-        const elements = [...document.querySelectorAll(selector)]
-            .filter(element => where ? evalWhere(element, where) : true);
+        const supportedTypes = ['insert', 'select', 'update', 'delete'];
+        if (!supportedTypes.includes(type)) {
+            throw new Error('Unsupported query type: ' + type);
+        }
 
-        if (type === 'select') {
-            // nothing
-        } else if (type === 'update') {
-            elements.forEach(element => {
+        let elements = [];
+        if (type === 'insert') {
+            const {table, columns, values} = ast;
+            const tagName = table[0].table;
+
+            if (!options?.insertTo) {
+                throw new Error('An insert root must be provided for an INSERT query');
+            }
+
+            if (set) {
+                const element = document.createElement(tagName);
+                options.insertTo.appendChild(element);
+                elements.push(element);
+
                 set.forEach(({column, value}) => {
                     element.setAttribute(column, evalOperand(element, value));
                 });
-            });
-        } else if (type === 'delete') {
-            elements.forEach(element => element.remove());
+            } else if (columns && values) {
+                values.forEach(({value}) => {
+                    const element = document.createElement(tagName);
+                    options.insertTo.appendChild(element);
+                    elements.push(element);
+
+                    value.map(v => evalOperand(element, v)).forEach((attr, index) => {
+                        element.setAttribute(columns[index], attr);
+                    });
+                });
+            }
+        } else {
+            const selector = buildCssSelector(ast);
+
+            elements = [...document.querySelectorAll(selector)];
+            if (where) {
+                elements = elements.filter(element => evalWhere(element, where));
+            }
+
+            if (type === 'select') {
+                // nothing
+            } else if (type === 'update') {
+                elements.forEach(element => {
+                    set.forEach(({column, value}) => {
+                        element.setAttribute(column, evalOperand(element, value));
+                    });
+                });
+            } else if (type === 'delete') {
+                elements.forEach(element => element.remove());
+            }
         }
 
         return {elements};
@@ -34,8 +72,6 @@ function execSql(sql) {
             tables = ast.from;
         } else if (ast.type === 'update' || ast.type === 'delete') {
             tables = ast.table;
-        } else {
-            throw new Error('Unsupported query type: ' + ast.type);
         }
 
         // If any of the tables is "dom", select all elements
