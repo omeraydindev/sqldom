@@ -237,7 +237,7 @@ export function execSql(sql, options) {
     }
 
     function evalBinaryExpr(element, operand) {
-        const {left, right, operator} = operand;
+        const {left, right, operator, expr} = operand;
 
         const _evalOperand = (operand) => evalOperand(element, operand);
 
