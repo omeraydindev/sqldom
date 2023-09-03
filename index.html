@@ -67,9 +67,10 @@
                value="select * from dom where type='text' or id like '%sql%' ">
     </form>
 </div>
-<script src="https://unpkg.com/node-sql-parser/umd/mysql.umd.js"></script>
-<script src="sqldom.js"></script>
+<script src="./dist/sqldom.min.js"></script>
 <script>
+    const {execSql} = window.sqldom;
+
     const container = document.querySelector('.container');
     const sqlInput = document.querySelector('#sql-input');
     const sqlForm = document.querySelector('#sql-form');

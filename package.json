@@ -1,8 +1,8 @@
 {
   "name": "sqldom",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A fun library to query and manipulate DOM elements using SQL",
-  "main": "sqldom.js",
+  "main": "./sqldom.js",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/MikeAndrson/sqldom.git"
@@ -15,5 +15,10 @@
   "homepage": "https://github.com/MikeAndrson/sqldom#readme",
   "dependencies": {
     "node-sql-parser": "^4.10.0"
+  },
+  "devDependencies": {
+    "webpack": "^5.88.2",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^4.15.1"
   }
 }

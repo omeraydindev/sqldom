@@ -1,4 +1,4 @@
-const { Parser } = require('node-sql-parser');
+const {Parser} = require('node-sql-parser/build/mysql');
 
 export function execSql(sql, options) {
     const sqlParser = new Parser();
