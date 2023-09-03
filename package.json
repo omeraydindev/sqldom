@@ -1,0 +1,19 @@
+{
+  "name": "sqldom",
+  "version": "1.0.0",
+  "description": "A fun library to query and manipulate DOM elements using SQL",
+  "main": "sqldom.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MikeAndrson/sqldom.git"
+  },
+  "author": "Mike Anderson",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/MikeAndrson/sqldom/issues"
+  },
+  "homepage": "https://github.com/MikeAndrson/sqldom#readme",
+  "dependencies": {
+    "node-sql-parser": "^4.10.0"
+  }
+}

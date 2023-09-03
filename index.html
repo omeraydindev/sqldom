@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>node-sql-parser</title>
+    <title>sqldom</title>
     <meta charset="utf-8"/>
     <style>
         * {
@@ -64,7 +64,7 @@
     <form id="sql-form" autocomplete="off">
         <label for="sql-input">Query DOM elements using SQL</label>
         <input type="text" id="sql-input" style="width: 500px; height: 150px;"
-               value="select * from dom where type='text' or id='sql-form' ">
+               value="select * from dom where type='text' or id like '%sql%' ">
     </form>
 </div>
 <script src="https://unpkg.com/node-sql-parser/umd/mysql.umd.js"></script>

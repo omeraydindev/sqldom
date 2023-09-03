@@ -1,5 +1,7 @@
-function execSql(sql, options) {
-    const sqlParser = new NodeSQLParser.Parser();
+const { Parser } = require('node-sql-parser');
+
+export function execSql(sql, options) {
+    const sqlParser = new Parser();
     const {ast} = sqlParser.parse(sql);
 
     return Array.isArray(ast)
