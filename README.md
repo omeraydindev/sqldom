@@ -19,16 +19,18 @@ npm install sqldom
 
 ## Usage
 ### Select
-Using the special table `dom` has the effect of selecting all elements from the DOM, while using a specific tag name like `button` will only select elements of that tag name.
+Using the table `dom` has the effect of selecting all elements from the DOM, while using a specific tag name like `button` will only select elements of that tag name.
+
+Columns are the properties of the element, e.g `id`, `class`,`value` etc. You can use `*` to select the DOM element itself.
 
 ```js
-const {elements} = execSql(`SELECT * FROM dom WHERE tag = "div" AND class = "foo"`);
-// elements is an array of DOM elements
+const {elements} = execSql(`SELECT * FROM dom WHERE class LIKE "%foo%"`);
+// `elements` is an array of DOM elements
 ```
 
 ```js
-const {elements} = execSql(`SELECT id FROM button WHERE text LIKE "%click%"`);
-// elements is an array of rows, each row containing the id of a button
+const {elements} = execSql(`SELECT id, type FROM button WHERE text = "Click me"`);
+// `elements` is an array of objects, each object containing the id and type of a button
 ```
 
 ### Update
