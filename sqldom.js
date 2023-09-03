@@ -156,6 +156,8 @@ function execSql(sql, options) {
             return operand.value;
         } else if (operand.type === 'function') {
             return evalFunction(element, operand);
+        } else if (operand.type === 'binary_expr') {
+            return evalBinaryExpr(element, operand);
         }
 
         throw new Error('Unsupported operand: ' + JSON.stringify(operand));
@@ -180,7 +182,19 @@ function execSql(sql, options) {
     }
 
     function evalWhere(element, where) {
-        const {left, right, operator, expr} = where;
+        const {operator} = where;
+
+        switch (operator) {
+            case undefined:
+                // select * from dom where 1
+                return !!evalOperand(element, where);
+            default:
+                return evalBinaryExpr(element, where);
+        }
+    }
+
+    function evalBinaryExpr(element, operand) {
+        const {left, right, operator} = operand;
 
         const _evalOperand = (operand) => evalOperand(element, operand);
 
@@ -188,9 +202,23 @@ function execSql(sql, options) {
             case 'NOT':
                 return !evalWhere(element, expr);
             case 'OR':
+            case '||':
                 return evalWhere(element, left) || evalWhere(element, right);
             case 'AND':
+            case '&&':
                 return evalWhere(element, left) && evalWhere(element, right);
+            case 'XOR':
+                return evalWhere(element, left) !== evalWhere(element, right);
+            case '+':
+                return _evalOperand(left) + _evalOperand(right);
+            case '-':
+                return _evalOperand(left) - _evalOperand(right);
+            case '*':
+                return _evalOperand(left) * _evalOperand(right);
+            case '/':
+                return _evalOperand(left) / _evalOperand(right);
+            case '%':
+                return _evalOperand(left) % _evalOperand(right);
             case '=':
                 return _evalOperand(left) === _evalOperand(right);
             case '!=':
@@ -257,9 +285,6 @@ function execSql(sql, options) {
                     throw new Error('Unsupported operator: ' + operator);
                 }
             }
-            case undefined:
-                // select * from dom where 1
-                return !!_evalOperand(where);
         }
 
         throw new Error('Unsupported operator: ' + operator);
