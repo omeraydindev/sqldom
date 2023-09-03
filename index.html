@@ -82,7 +82,11 @@
         (Array.isArray(results) ? results : [results])
             .forEach(result => result.elements.forEach(highlightElement));
 
+        console.log(results);
+
         function highlightElement(element) {
+            if (!element.classList) return;
+
             element.classList.add('flashing');
             setTimeout(() => element.classList.remove('flashing'), 1000);
         }

@@ -7,77 +7,143 @@ function execSql(sql, options) {
         : evalAst(ast);
 
     function evalAst(ast) {
-        const {type, where, set} = ast;
-
-        const supportedTypes = ['insert', 'select', 'update', 'delete'];
-        if (!supportedTypes.includes(type)) {
-            throw new Error('Unsupported query type: ' + type);
-        }
-
-        let elements = [];
-        if (type === 'insert') {
-            const {table, columns, values} = ast;
-            const tagName = table[0].table;
-
-            if (!options?.insertTo) {
-                throw new Error('An insert root must be provided for an INSERT query');
+        const elements = (() => {
+            switch (ast.type) {
+                case 'insert':
+                    return evalInsertStatement(ast);
+                case 'select':
+                    return evalSelectStatement(ast);
+                case 'update':
+                    return evalUpdateStatement(ast);
+                case 'delete':
+                    return evalDeleteStatement(ast);
+                default:
+                    throw new Error('Unsupported query type: ' + ast.type);
             }
-
-            if (set) {
-                const element = document.createElement(tagName);
-                options.insertTo.appendChild(element);
-                elements.push(element);
-
-                set.forEach(({column, value}) => {
-                    element.setAttribute(column, evalOperand(element, value));
-                });
-            } else if (columns && values) {
-                values.forEach(({value}) => {
-                    const element = document.createElement(tagName);
-                    options.insertTo.appendChild(element);
-                    elements.push(element);
-
-                    value.map(v => evalOperand(element, v)).forEach((attr, index) => {
-                        element.setAttribute(columns[index], attr);
-                    });
-                });
-            }
-        } else {
-            const selector = buildCssSelector(ast);
-
-            elements = [...document.querySelectorAll(selector)];
-            if (where) {
-                elements = elements.filter(element => evalWhere(element, where));
-            }
-
-            if (type === 'select') {
-                // nothing
-            } else if (type === 'update') {
-                elements.forEach(element => {
-                    set.forEach(({column, value}) => {
-                        element.setAttribute(column, evalOperand(element, value));
-                    });
-                });
-            } else if (type === 'delete') {
-                elements.forEach(element => element.remove());
-            }
-        }
+        })();
 
         return {elements};
     }
 
-    function buildCssSelector(ast) {
-        let tables;
-        if (ast.type === 'select') {
-            tables = ast.from;
-        } else if (ast.type === 'update' || ast.type === 'delete') {
-            tables = ast.table;
+    function evalInsertStatement(ast) {
+        const {set, columns, values} = ast;
+        const tables = getTablesFromAst(ast);
+        const tagName = tables[0].table;
+
+        const elements = [];
+
+        if (!options?.insertTo) {
+            throw new Error('An insert root must be provided for an INSERT query');
         }
 
+        if (set) {
+            const element = document.createElement(tagName);
+            options.insertTo.appendChild(element);
+            elements.push(element);
+
+            set.forEach(({column, value}) => {
+                element.setAttribute(column, evalOperand(element, value));
+            });
+        } else if (columns && values) {
+            values.forEach(({value}) => {
+                const element = document.createElement(tagName);
+                options.insertTo.appendChild(element);
+                elements.push(element);
+
+                columns.forEach((column, index) => {
+                    element.setAttribute(column, evalOperand(element, value[index]));
+                });
+            });
+        }
+
+        return elements;
+    }
+
+    function evalSelectStatement(ast) {
+        const {where, columns} = ast;
+        const tables = getTablesFromAst(ast);
+        const usedTables = tables?.length > 0;
+
+        let elements;
+        if (usedTables) {
+            elements = selectElements(tables, where);
+        }
+
+        if (columns.some(c => c.expr.column === '*')) {
+            if (!usedTables) {
+                throw new Error('No tables used');
+            }
+
+            return elements;
+        }
+
+        elements ||= [{}];
+        const matches = new Array(elements.length).fill(0).map(_ => ({}));
+
+        elements.forEach((element, index) => {
+            columns.forEach(({as, expr}) => {
+                const columnName = as ?? sqlParser.exprToSQL(expr);
+                matches[index][columnName] = evalOperand(element, expr);
+            });
+        });
+
+        return matches;
+    }
+
+    function evalUpdateStatement(ast) {
+        const {set, where} = ast;
+        const tables = getTablesFromAst(ast);
+        const elements = selectElements(tables, where);
+
+        elements.forEach(element => {
+            set.forEach(({column, value}) => {
+                element.setAttribute(column, evalOperand(element, value));
+            });
+        });
+
+        return elements;
+    }
+
+    function evalDeleteStatement(ast) {
+        const {where} = ast;
+        const tables = getTablesFromAst(ast);
+        const elements = selectElements(tables, where);
+
+        elements.forEach(element => element.remove());
+
+        return elements;
+    }
+
+    /**
+     * @returns {Array<{table: string}>}
+     */
+    function getTablesFromAst(ast) {
+        if (ast.type === 'select') {
+            return ast.from;
+        } else if (ast.type === 'update' || ast.type === 'delete' || ast.type === 'insert') {
+            return ast.table;
+        }
+
+        throw new Error('Unsupported query type: ' + ast.type);
+    }
+
+    /** @returns {string} */
+    function buildCssSelector(tables) {
         // If any of the tables is "dom", select all elements
         return tables.some(t => /dom/i.test(t.table))
             ? '*'
             : tables.map(t => t.table).join(',');
+    }
+
+    function selectElements(tables, where) {
+        const selector = buildCssSelector(tables);
+
+        let elements = [...document.querySelectorAll(selector)];
+        if (where) {
+            elements = elements.filter(element => evalWhere(element, where));
+        }
+
+        return elements;
     }
 
     function evalOperand(element, operand) {
@@ -147,7 +213,9 @@ function execSql(sql, options) {
                 const lhs = _evalOperand(left);
                 const rhs = _evalOperand(right);
                 const likeToRegex = (like) =>
-                    new RegExp('^' + like.replace(/%/g, '.*').replace(/_/g, '.') + '$');
+                    new RegExp('^' +
+                        like.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+                            .replace(/%/g, '.*').replace(/_/g, '.') + '$');
 
                 const result = likeToRegex(rhs).test(lhs);
                 const negate = operator.startsWith('NOT');
